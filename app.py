@@ -122,6 +122,7 @@ def interview_reply():
         result = json.loads(llm(prompts.INTERVIEW_REPLY_PROMPT.format(conversation=convo), system=system, json_mode=True))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 502
+    result["reply"] = f"{result.get('feedback', '')}\n\nNext question: {result.get('next_question', '')}"
     return jsonify(result)
 
 
