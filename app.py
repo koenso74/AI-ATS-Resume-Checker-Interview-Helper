@@ -13,13 +13,17 @@ app = Flask(__name__)
 
 
 def get_client():
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is not configured")
-    return OpenAI(api_key=api_key)
+        raise RuntimeError("GROQ_API_KEY or OPENAI_API_KEY is not configured")
+    base_url = os.getenv("OPENAI_BASE_URL")
+    return OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
 
 
-MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+MODEL = os.getenv(
+    "OPENAI_MODEL",
+    "llama-3.3-70b-versatile" if os.getenv("GROQ_API_KEY") else "gpt-4o-mini",
+)
 
 
 def llm(prompt, system=None, json_mode=False):
@@ -83,10 +87,10 @@ def interview_reply():
     data = request.get_json(silent=True) or {}
     system = data.get("system", "")
     history = data.get("history", [])
-    convo = "\n".join(f"{m.get('role', 'user')}: {m.get('content', '')}" for m in history)
+    convo = "\\n".join(f"{m.get('role', 'user')}: {m.get('content', '')}" for m in history)
     try:
         reply = llm(
-            f"Conversation so far:\n{convo}\n\nCandidate's last answer is above. "
+            f"Conversation so far:\\n{convo}\\n\\nCandidate's last answer is above. "
             "Give brief feedback, then ask the next question.",
             system=system,
         )
