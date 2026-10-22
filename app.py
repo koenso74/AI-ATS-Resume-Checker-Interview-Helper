@@ -119,14 +119,10 @@ def interview_reply():
     history = data.get("history", [])
     convo = "\n".join(f"{m.get('role', 'user')}: {m.get('content', '')}" for m in history)
     try:
-        reply = llm(
-            f"Conversation so far:\n{convo}\n\nCandidate's last answer is above. "
-            "Give brief feedback, then ask the next question.",
-            system=system,
-        )
+        result = json.loads(llm(prompts.INTERVIEW_REPLY_PROMPT.format(conversation=convo), system=system, json_mode=True))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 502
-    return jsonify({"reply": reply})
+    return jsonify(result)
 
 
 if __name__ == "__main__":

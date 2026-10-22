@@ -37,6 +37,19 @@ CANDIDATE RESUME:
 {resume}
 """
 
+INTERVIEW_REPLY_PROMPT = """
+Review the candidate's latest answer in the interview conversation.
+Return ONLY JSON with this schema:
+{{"feedback":"<2-3 sentences of specific, constructive feedback>","next_question":"<one concise follow-up interview question>"}}
+
+Feedback should mention what was strong and one concrete improvement. The next
+question should connect to the resume or the candidate's answer, without
+inventing experience or assuming a job description.
+
+CONVERSATION:
+{conversation}
+"""
+
 KEYWORD_EXTRACTION_PROMPT = """
 You are an expert technical recruiter. Extract the hard requirements from the
 job description below. Return ONLY a JSON object with this schema:
