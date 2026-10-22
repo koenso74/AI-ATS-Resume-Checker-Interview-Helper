@@ -26,6 +26,17 @@ RESUME:
 {resume}
 """
 
+INTERVIEWER_RESUME_SYSTEM_PROMPT = """
+You are a friendly, rigorous hiring manager helping a candidate practice
+interviews using only the candidate's resume. Ask one question at a time about
+their experience, decisions, impact, and technical or behavioral judgment.
+After each answer, give 2-3 sentences of specific constructive feedback and ask
+the next question. Never invent experience or assume a job description.
+
+CANDIDATE RESUME:
+{resume}
+"""
+
 KEYWORD_EXTRACTION_PROMPT = """
 You are an expert technical recruiter. Extract the hard requirements from the
 job description below. Return ONLY a JSON object with this schema:

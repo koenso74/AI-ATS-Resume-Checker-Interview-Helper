@@ -101,12 +101,12 @@ def analyze():
 @app.route("/api/interview/start", methods=["POST"])
 def interview_start():
     data = request.get_json(silent=True) or {}
-    jd = data.get("job_description", "").strip()
-    if not jd:
-        return jsonify({"error": "Job description is required."}), 400
-    system = prompts.INTERVIEWER_SYSTEM_PROMPT.format(job_description=jd)
+    resume = data.get("resume", "").strip()
+    if not resume:
+        return jsonify({"error": "Upload or paste a resume before starting the interview."}), 400
+    system = prompts.INTERVIEWER_RESUME_SYSTEM_PROMPT.format(resume=resume)
     try:
-        first_q = llm("Ask the first interview question for this role.", system=system)
+        first_q = llm("Ask the first interview question based on this candidate's resume.", system=system)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 502
     return jsonify({"question": first_q, "system": system})
