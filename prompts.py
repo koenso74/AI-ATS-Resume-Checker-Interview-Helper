@@ -1,3 +1,31 @@
+ATS_FORMAT_PROMPT = """
+You are an expert ATS resume auditor and professional resume formatter.
+Evaluate the resume below without comparing it to a job description.
+
+Check for ATS compatibility: clear standard section headings, readable dates,
+consistent formatting, plain text extraction, measurable accomplishments,
+keyword-friendly skills, concise language, contact information, and problems
+caused by tables, columns, graphics, icons, headers, or footers.
+
+Return ONLY JSON with this schema:
+{{
+  "overall_score": <0-100 integer>,
+  "format_score": <0-100 integer>,
+  "content_score": <0-100 integer>,
+  "summary": "<two concise sentences>",
+  "strengths": ["<3-5 specific strengths>"],
+  "issues": [{{"severity":"high|medium|low", "title":"<short title>", "detail":"<specific explanation>"}}],
+  "suggestions": ["<4-6 concrete improvements>"],
+  "rewritten_summary": "<an improved professional summary if one is present, otherwise an example tailored only to the resume's actual experience>"
+}}
+
+Do not invent employers, dates, education, skills, or achievements. Be practical
+and prioritize changes that improve parsing by common applicant tracking systems.
+
+RESUME:
+{resume}
+"""
+
 KEYWORD_EXTRACTION_PROMPT = """
 You are an expert technical recruiter. Extract the hard requirements from the
 job description below. Return ONLY a JSON object with this schema:
