@@ -26,7 +26,7 @@ def get_client():
 
 MODEL = os.getenv(
     "OPENAI_MODEL",
-    "llama-3.3-70b-versatile" if os.getenv("GROQ_API_KEY") else "gpt-4o-mini",
+    "openai/gpt-oss-120b" if os.getenv("GROQ_API_KEY") else "gpt-4o-mini",
 )
 
 
