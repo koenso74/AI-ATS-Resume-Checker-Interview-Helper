@@ -1,9 +1,13 @@
 import json
 import os
+from io import BytesIO
+from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request
 from openai import OpenAI
+from docx import Document
+from pypdf import PdfReader
 
 import prompts
 
@@ -41,6 +45,42 @@ def llm(prompt, system=None, json_mode=False):
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+def extract_document_text(upload):
+    """Extract text from a PDF, DOCX, or plain-text upload in memory."""
+    extension = Path(upload.filename or "").suffix.lower()
+    content = upload.read()
+    if not content:
+        raise ValueError("The uploaded file is empty.")
+    if len(content) > 8 * 1024 * 1024:
+        raise ValueError("Please upload a file smaller than 8 MB.")
+
+    if extension == ".pdf":
+        text = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(content)).pages)
+    elif extension == ".docx":
+        document = Document(BytesIO(content))
+        text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    elif extension in {".txt", ".md"}:
+        text = content.decode("utf-8", errors="replace")
+    else:
+        raise ValueError("Supported file types are PDF, DOCX, TXT, and MD. Legacy .doc files are not supported.")
+
+    text = text.strip()
+    if not text:
+        raise ValueError("No readable text was found in the uploaded file.")
+    return text
+
+
+@app.route("/api/extract", methods=["POST"])
+def extract():
+    upload = request.files.get("document")
+    if not upload:
+        return jsonify({"error": "Choose a PDF, DOCX, TXT, or MD file."}), 400
+    try:
+        return jsonify({"text": extract_document_text(upload)})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 @app.route("/api/analyze", methods=["POST"])
@@ -87,10 +127,10 @@ def interview_reply():
     data = request.get_json(silent=True) or {}
     system = data.get("system", "")
     history = data.get("history", [])
-    convo = "\\n".join(f"{m.get('role', 'user')}: {m.get('content', '')}" for m in history)
+    convo = "\n".join(f"{m.get('role', 'user')}: {m.get('content', '')}" for m in history)
     try:
         reply = llm(
-            f"Conversation so far:\\n{convo}\\n\\nCandidate's last answer is above. "
+            f"Conversation so far:\n{convo}\n\nCandidate's last answer is above. "
             "Give brief feedback, then ask the next question.",
             system=system,
         )

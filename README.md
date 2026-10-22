@@ -2,6 +2,8 @@
 
 An MVP Flask app that scores a resume against a job description and provides a tailored mock interview. It demonstrates iterative refinement (keyword extraction → ATS scoring → suggestions), persona prompting, few-shot examples, and structured JSON output.
 
+The Analyze tab accepts pasted text or imports PDF, DOCX, TXT, and Markdown files for both the resume and job description. Files are parsed in memory and are not persisted.
+
 ## Local setup
 
 ```bash
