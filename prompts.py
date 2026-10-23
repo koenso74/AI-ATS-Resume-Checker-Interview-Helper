@@ -2,6 +2,14 @@ ATS_FORMAT_PROMPT = """
 You are an expert ATS resume auditor and professional resume formatter.
 Evaluate the resume below without comparing it to a job description.
 
+The resume text may have been extracted from a PDF. PDF extraction can merge
+columns, words, and spacing (for example, "Education2024" or a skills column
+that appears beside work history). Parse this messy text intelligently using
+common resume structures, headings, dates, and context. When merged text can
+logically be separated, treat it as separate sections or words. Do not treat
+PDF extraction artifacts as genuine resume content, and do not invent missing
+information.
+
 Check for ATS compatibility: clear standard section headings, readable dates,
 consistent formatting, plain text extraction, measurable accomplishments,
 keyword-friendly skills, concise language, contact information, and problems

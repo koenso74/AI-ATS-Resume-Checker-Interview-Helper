@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request
 from openai import OpenAI
 from docx import Document
-from pypdf import PdfReader
+import pdfplumber
 
 import prompts
 
@@ -57,7 +57,14 @@ def extract_document_text(upload):
         raise ValueError("Please upload a file smaller than 8 MB.")
 
     if extension == ".pdf":
-        text = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(content)).pages)
+        # layout=True preserves the visual spacing between columns and labels
+        # so the ATS prompt can reason about PDF extraction artifacts.
+        with pdfplumber.open(BytesIO(content)) as pdf:
+            pages = [
+                page.extract_text(layout=True, x_tolerance=2, y_tolerance=3) or ""
+                for page in pdf.pages
+            ]
+        text = "\n\n".join(pages)
     elif extension == ".docx":
         document = Document(BytesIO(content))
         text = "\n".join(paragraph.text for paragraph in document.paragraphs)
