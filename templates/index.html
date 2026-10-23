@@ -34,6 +34,7 @@
     button:hover { transform: translateY(-1px); background: #0e9f6e; }
     .status { color: #64748b; font-size: 13px; }
     #results { display: none; }
+    #results.visible { display: block; }
     .score-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
     .score { color: #0e9f6e; font-size: 58px; line-height: 1; font-weight: 900; letter-spacing: -.07em; }
     .score small { display: block; color: #8a96a8; font-size: 12px; letter-spacing: .02em; }
@@ -64,29 +65,224 @@
 </head>
 <body>
   <main class="shell">
-    <header><div class="brand"><div class="mark">✓</div> ClearPath ATS</div><div class="badge">Resume-first checker</div></header>
-    <section class="hero"><div class="eyebrow">ATS clarity audit</div><h1>Make your resume easier to read, parse, and trust.</h1><p>Upload your resume and get a practical ATS score, formatting diagnosis, and rewrite suggestions — no job description required.</p></section>
-    <section class="workspace">
-      <div class="card"><h2>Review your resume</h2><div class="muted">PDF and Word files are extracted securely in memory. You can also paste your text below.</div><label class="dropzone" id="dropzone" for="resumeFile"><div class="upload-icon">↑</div><strong>Drop a resume here or browse</strong><span>PDF, DOCX, TXT, or MD · up to 8 MB</span><input id="resumeFile" type="file" accept=".pdf,.docx,.txt,.md"></label><textarea id="resume" placeholder="Paste your resume text here..."></textarea><div class="actions"><button id="analyzeBtn">Run ATS audit</button><span id="status" class="status"></span></div></div>
-      <div id="results" class="card"><div class="muted">Your results will appear here</div><h2 style="margin-top:8px">Ready when you are</h2><p class="muted">Your score, strengths, issues, and rewrite guidance will show after the audit.</p></div>
+    <header>
+      <div class="brand"><div class="mark">✓</div> ClearPath ATS</div>
+      <div class="badge">Resume-first checker</div>
+    </header>
+
+    <section class="hero">
+      <div class="eyebrow">ATS clarity audit</div>
+      <h1>Make your resume easier to read, parse, and trust.</h1>
+      <p>Upload your resume and get a practical ATS score, formatting diagnosis, and rewrite suggestions — no job description required.</p>
     </section>
-    <section class="card interview"><h2>Practice interview</h2><div class="muted">Use your resume as context and practice concise, evidence-based answers with a virtual hiring manager.</div><div id="chat" class="chat"><div class="muted">Start an interview after uploading or pasting your resume.</div></div><div class="actions"><button id="startInterview" class="secondary">Start interview</button><div class="chat-row" style="flex:1"><input id="answer" placeholder="Type your answer..." disabled><button id="sendAnswer" disabled>Send</button></div></div></section>
+
+    <section class="workspace">
+      <div class="card">
+        <h2>Review your resume</h2>
+        <div class="muted">PDF and Word files are extracted securely in memory. You can also paste your text below.</div>
+        <label class="dropzone" id="dropzone" for="resumeFile">
+          <div class="upload-icon">↑</div>
+          <strong>Drop a resume here or browse</strong>
+          <span>PDF, DOCX, TXT, or MD · up to 8 MB</span>
+          <input id="resumeFile" type="file" accept=".pdf,.docx,.txt,.md">
+        </label>
+        <textarea id="resume" placeholder="Paste your resume text here..."></textarea>
+        <div class="actions">
+          <button id="analyzeBtn">Run ATS audit</button>
+          <span id="status" class="status"></span>
+        </div>
+      </div>
+
+      <div id="results" class="card">
+        <div class="muted">Your results will appear here</div>
+        <h2 style="margin-top:8px">Ready when you are</h2>
+        <p class="muted">Your score, strengths, issues, and rewrite guidance will show after the audit.</p>
+      </div>
+    </section>
+
+    <section class="card interview">
+      <h2>Practice interview</h2>
+      <div class="muted">Use your resume as context and practice concise, evidence-based answers with a virtual hiring manager.</div>
+      <div id="chat" class="chat">
+        <div class="muted">Start an interview after uploading or pasting your resume.</div>
+      </div>
+      <div class="actions">
+        <button id="startInterview" class="secondary">Start interview</button>
+        <div class="chat-row" style="flex:1">
+          <input id="answer" placeholder="Type your answer..." disabled>
+          <button id="sendAnswer" disabled>Send</button>
+        </div>
+      </div>
+    </section>
   </main>
+
   <script>
-    const fileInput = document.getElementById('resumeFile'), dropzone = document.getElementById('dropzone'), resume = document.getElementById('resume'), status = document.getElementById('status'), results = document.getElementById('results');
-    async function importFile(file) { if (!file) return; status.textContent = 'Importing ' + file.name + '...'; const form = new FormData(); form.append('document', file); try { const res = await fetch('/api/extract', {method:'POST', body:form}); const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Import failed'); resume.value = data.text; status.textContent = 'Imported ' + file.name; } catch (e) { status.textContent = e.message; } }
+    const fileInput = document.getElementById('resumeFile');
+    const dropzone = document.getElementById('dropzone');
+    const resume = document.getElementById('resume');
+    const status = document.getElementById('status');
+    const results = document.getElementById('results');
+
+    async function importFile(file) {
+      if (!file) return;
+      status.textContent = 'Importing ' + file.name + '...';
+      const form = new FormData();
+      form.append('document', file);
+
+      try {
+        const response = await fetch('/api/extract', { method: 'POST', body: form });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Import failed');
+        resume.value = data.text;
+        status.textContent = 'Imported ' + file.name;
+      } catch (error) {
+        status.textContent = error.message;
+      }
+    }
+
     fileInput.addEventListener('change', () => importFile(fileInput.files[0]));
-    ['dragenter','dragover'].forEach(event => dropzone.addEventListener(event, e => { e.preventDefault(); dropzone.classList.add('dragging'); }));
-    ['dragleave','drop'].forEach(event => dropzone.addEventListener(event, e => { e.preventDefault(); dropzone.classList.remove('dragging'); }));
+    ['dragenter', 'dragover'].forEach(event => dropzone.addEventListener(event, e => {
+      e.preventDefault();
+      dropzone.classList.add('dragging');
+    }));
+    ['dragleave', 'drop'].forEach(event => dropzone.addEventListener(event, e => {
+      e.preventDefault();
+      dropzone.classList.remove('dragging');
+    }));
     dropzone.addEventListener('drop', e => importFile(e.dataTransfer.files[0]));
-    function list(items) { return '<ul>' + (items || []).map(item => '<li>' + item + '</li>').join('') + '</ul>'; }
-    document.getElementById('analyzeBtn').addEventListener('click', async () => { const text = resume.value.trim(); if (!text) { status.textContent = 'Upload or paste a resume first.'; return; } status.textContent = 'Auditing...'; try { const res = await fetch('/api/analyze', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({resume:text})}); const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Audit failed'); const overall = Math.max(0, Math.min(100, Number(data.overall_score) || 0)); results.innerHTML = '<div class="score-row"><div><div class="score">' + overall + '<small>/ 100 overall ATS score</small></div></div><div class="ring" style="--score:' + overall + '" aria-label="Overall ATS score: ' + overall + ' out of 100"><span>' + overall + '</span></div></div><p class="summary">' + data.summary + '</p><div class="mini-grid"><div class="metric"><b>' + data.format_score + '</b><span>Format & parsing</span></div><div class="metric"><b>' + data.content_score + '</b><span>Content clarity</span></div></div><div class="section"><h3>What is working</h3>' + list(data.strengths) + '</div><div class="section"><h3>Priority fixes</h3>' + (data.issues || []).map(i => '<div class="issue ' + i.severity + '"><b>' + i.title + '</b><span>' + i.detail + '</span></div>').join('') + '</div><div class="section"><h3>Recommended improvements</h3>' + list(data.suggestions) + '</div><div class="section"><h3>Suggested summary</h3><div class="rewrite">' + data.rewritten_summary + '</div></div>'; status.textContent = 'Audit complete'; } catch (e) { status.textContent = e.message; } });
-    let interviewSystem = '', interviewHistory = [];
-    const chat = document.getElementById('chat'), answer = document.getElementById('answer'), startInterview = document.getElementById('startInterview'), sendAnswer = document.getElementById('sendAnswer');
-    function addBubble(who, text) { const bubble = document.createElement('div'); bubble.className = 'bubble ' + (who === 'You' ? 'you' : 'interviewer'); bubble.textContent = text; chat.appendChild(bubble); chat.scrollTop = chat.scrollHeight; }
-    startInterview.addEventListener('click', async () => { const text = resume.value.trim(); if (!text) { status.textContent = 'Upload or paste a resume before starting the interview.'; return; } startInterview.disabled = true; startInterview.textContent = 'Starting...'; chat.innerHTML = ''; try { const res = await fetch('/api/interview/start', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({resume:text})}); const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Could not start interview'); interviewSystem = data.system; interviewHistory = [{role:'assistant',content:data.question}]; addBubble('Interviewer', data.question); answer.disabled = false; sendAnswer.disabled = false; answer.focus(); } catch (e) { addBubble('Interviewer', e.message); } finally { startInterview.disabled = false; startInterview.textContent = 'Restart interview'; } });
-    async function reply() { const text = answer.value.trim(); if (!text || !interviewSystem) return; answer.value = ''; addBubble('You', text); interviewHistory.push({role:'user',content:text}); sendAnswer.disabled = true; try { const res = await fetch('/api/interview/reply', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:interviewSystem,history:interviewHistory})}); const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Could not send answer'); addBubble('Feedback', data.feedback); addBubble('Next question', data.next_question); interviewHistory.push({role:'assistant',content:data.next_question}); } catch (e) { addBubble('Interviewer', e.message); } finally { sendAnswer.disabled = false; answer.focus(); } }
-    sendAnswer.addEventListener('click', reply); answer.addEventListener('keydown', e => { if (e.key === 'Enter') reply(); });
+
+    function list(items) {
+      return '<ul>' + (items || []).map(item => '<li>' + item + '</li>').join('') + '</ul>';
+    }
+
+    function issueList(issues) {
+      return (issues || []).map(issue =>
+        '<div class="issue ' + issue.severity + '"><b>' + issue.title + '</b><span>' + issue.detail + '</span></div>'
+      ).join('');
+    }
+
+    document.getElementById('analyzeBtn').addEventListener('click', async () => {
+      const text = resume.value.trim();
+      if (!text) {
+        status.textContent = 'Upload or paste a resume first.';
+        return;
+      }
+
+      status.textContent = 'Auditing...';
+      try {
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resume: text })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Audit failed');
+
+        const overall = Math.max(0, Math.min(100, Number(data.overall_score) || 0));
+        results.innerHTML = `
+          <div class="score-row">
+            <div>
+              <div class="score">${overall}<small>/ 100 overall ATS score</small></div>
+            </div>
+            <div class="ring" style="--score:${overall}" aria-label="Overall ATS score: ${overall} out of 100">
+              <span>${overall}</span>
+            </div>
+          </div>
+          <p class="summary">${data.summary}</p>
+          <div class="mini-grid">
+            <div class="metric"><b>${data.format_score}</b><span>Format &amp; parsing</span></div>
+            <div class="metric"><b>${data.content_score}</b><span>Content clarity</span></div>
+          </div>
+          <div class="section"><h3>What is working</h3>${list(data.strengths)}</div>
+          <div class="section"><h3>Priority fixes</h3>${issueList(data.issues)}</div>
+          <div class="section"><h3>Recommended improvements</h3>${list(data.suggestions)}</div>
+          <div class="section"><h3>Suggested summary</h3><div class="rewrite">${data.rewritten_summary}</div></div>
+        `;
+        results.classList.add('visible');
+        status.textContent = 'Audit complete';
+      } catch (error) {
+        status.textContent = error.message;
+      }
+    });
+
+    let interviewSystem = '';
+    let interviewHistory = [];
+    const chat = document.getElementById('chat');
+    const answer = document.getElementById('answer');
+    const startInterview = document.getElementById('startInterview');
+    const sendAnswer = document.getElementById('sendAnswer');
+
+    function addBubble(who, text) {
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble ' + (who === 'You' ? 'you' : 'interviewer');
+      bubble.textContent = text;
+      chat.appendChild(bubble);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    startInterview.addEventListener('click', async () => {
+      const text = resume.value.trim();
+      if (!text) {
+        status.textContent = 'Upload or paste a resume before starting the interview.';
+        return;
+      }
+
+      startInterview.disabled = true;
+      startInterview.textContent = 'Starting...';
+      chat.innerHTML = '';
+      try {
+        const response = await fetch('/api/interview/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resume: text })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not start interview');
+        interviewSystem = data.system;
+        interviewHistory = [{ role: 'assistant', content: data.question }];
+        addBubble('Interviewer', data.question);
+        answer.disabled = false;
+        sendAnswer.disabled = false;
+        answer.focus();
+      } catch (error) {
+        addBubble('Interviewer', error.message);
+      } finally {
+        startInterview.disabled = false;
+        startInterview.textContent = 'Restart interview';
+      }
+    });
+
+    async function reply() {
+      const text = answer.value.trim();
+      if (!text || !interviewSystem) return;
+      answer.value = '';
+      addBubble('You', text);
+      interviewHistory.push({ role: 'user', content: text });
+      sendAnswer.disabled = true;
+
+      try {
+        const response = await fetch('/api/interview/reply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ system: interviewSystem, history: interviewHistory })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not send answer');
+        addBubble('Feedback', data.feedback);
+        addBubble('Next question', data.next_question);
+        interviewHistory.push({ role: 'assistant', content: data.next_question });
+      } catch (error) {
+        addBubble('Interviewer', error.message);
+      } finally {
+        sendAnswer.disabled = false;
+        answer.focus();
+      }
+    }
+
+    sendAnswer.addEventListener('click', reply);
+    answer.addEventListener('keydown', e => {
+      if (e.key === 'Enter') reply();
+    });
   </script>
 </body>
 </html>
