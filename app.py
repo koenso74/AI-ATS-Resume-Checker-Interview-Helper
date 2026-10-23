@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from io import BytesIO
 from pathlib import Path
 
@@ -57,11 +58,16 @@ def extract_document_text(upload):
         raise ValueError("Please upload a file smaller than 8 MB.")
 
     if extension == ".pdf":
-        # layout=True preserves the visual spacing between columns and labels
-        # so the ATS prompt can reason about PDF extraction artifacts.
+        # Natural text flow avoids the very large padding runs that layout=True
+        # inserts to reproduce a PDF's visual columns.
         with pdfplumber.open(BytesIO(content)) as pdf:
             pages = [
-                page.extract_text(layout=True, x_tolerance=2, y_tolerance=3) or ""
+                page.extract_text(
+                    layout=False,
+                    x_tolerance=2,
+                    y_tolerance=3,
+                    use_text_flow=True,
+                ) or ""
                 for page in pdf.pages
             ]
         text = "\n\n".join(pages)
@@ -73,6 +79,12 @@ def extract_document_text(upload):
     else:
         raise ValueError("Supported file types are PDF, DOCX, TXT, and MD. Legacy .doc files are not supported.")
 
+    # Normalize extraction artifacts while retaining useful section breaks.
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"(?<=\w)-\n(?=\w)", "", text)
+    cleaned_lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.split("\n")]
+    text = "\n".join(cleaned_lines)
+    text = re.sub(r"\n{3,}", "\n\n", text)
     text = text.strip()
     if not text:
         raise ValueError("No readable text was found in the uploaded file.")
