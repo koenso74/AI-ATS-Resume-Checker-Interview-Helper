@@ -188,7 +188,7 @@
           <td>${item.iteration}</td>
           <td>${item.score_before}</td>
           <td>${item.score_after}</td>
-          <td>${(item.edits || []).map(edit => `${edit.section}: ${edit.action}`).join('<br>') || 'No valid edits'}</td>
+          <td>${(item.edits || []).map(edit => `${edit.section}: ${edit.action}`).join('<br>') || 'No valid edits'}<br><small>${item.applied ? 'Applied and verified' : 'Not applied'}</small></td>
         </tr>
       `).join('');
     }
