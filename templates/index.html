@@ -286,6 +286,7 @@
           </div>
           <div class="actions">
             <button id="downloadImproved" class="improve">Download improved DOCX</button>
+            <button id="downloadBestJson">Download best version JSON</button>
           </div>
           <div class="disclaimer">${escapeHtml(data.disclaimer)}</div>
         `;
@@ -308,6 +309,17 @@
           const link = document.createElement('a');
           link.href = url;
           link.download = 'improved-resume.docx';
+          link.click();
+          URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('downloadBestJson').addEventListener('click', () => {
+          if (!window.confirm('Download the best resume version as a JSON file?')) return;
+          const blob = new Blob([JSON.stringify(data.best_version_json || {}, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'best-resume-version.json';
           link.click();
           URL.revokeObjectURL(url);
         });
