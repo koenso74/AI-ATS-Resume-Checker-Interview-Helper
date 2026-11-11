@@ -201,7 +201,7 @@ def analyze():
 def improve_resume():
     data = request.get_json(silent=True) or {}
     original = data.get("resume", "").strip()
-    requested_priority_fixes = data.get("priority_fixes", [])
+    requested_priority_fixes = data.get("priority_fixes", {})
     if not original:
         return jsonify({"error": "A resume is required."}), 400
 
@@ -216,8 +216,16 @@ def improve_resume():
         decision_log = []
 
         for iteration in range(1, MAX_ITERATIONS + 1):
-            if iteration == 1 and isinstance(requested_priority_fixes, list):
-                gaps = [str(item).strip() for item in requested_priority_fixes if str(item).strip()][:12]
+            if iteration == 1 and isinstance(requested_priority_fixes, dict) and (
+                requested_priority_fixes.get("issues") or requested_priority_fixes.get("suggestions")
+            ):
+                priority_issues = requested_priority_fixes.get("issues", [])
+                priority_suggestions = requested_priority_fixes.get("suggestions", [])
+                gaps = [
+                    f"{issue.get('severity', 'medium')}: {issue.get('title', '')} - {issue.get('detail', '')}"
+                    for issue in priority_issues if isinstance(issue, dict)
+                ] + [str(item).strip() for item in priority_suggestions if str(item).strip()]
+                gaps = gaps[:12]
             else:
                 gaps = score_gaps(score_before_result)
             raw_decisions = llm(
@@ -238,6 +246,7 @@ def improve_resume():
                     "score_before": score_before,
                     "score_after": score_before,
                     "stopped": "no valid edits",
+                    "priority_gaps_used": gaps if iteration == 1 else [],
                 })
                 break
 
@@ -256,6 +265,7 @@ def improve_resume():
                     "score_before": score_before,
                     "score_after": score_before,
                     "stopped": "invalid revised resume",
+                    "priority_gaps_used": gaps if iteration == 1 else [],
                 })
                 break
 
@@ -267,6 +277,7 @@ def improve_resume():
                 "rejected": rejected,
                 "score_before": score_before,
                 "score_after": score_after,
+                "priority_gaps_used": gaps if iteration == 1 else [],
             })
 
             if score_after > int(best_result.get("overall_score", 0)):
@@ -288,6 +299,7 @@ def improve_resume():
             "best_result": best_result,
             "iteration_log": iteration_log,
             "decision_log": decision_log,
+            "initial_gaps_used": iteration_log[0].get("priority_gaps_used", []) if iteration_log else [],
             "max_iterations": MAX_ITERATIONS,
             "disclaimer": "A higher ATS score does not guarantee a better resume.",
         })
