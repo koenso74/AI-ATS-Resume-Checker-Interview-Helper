@@ -34,6 +34,53 @@ RESUME:
 {resume}
 """
 
+IMPROVEMENT_DECISIONS_PROMPT = """
+You are the planning component of a bounded ATS resume improvement workflow.
+Review the current resume and the latest ATS gaps. Return ONLY JSON in this
+schema:
+{{"edits":[{{"section":"<allowed section>","action":"<allowed action>","instructions":"<specific non-empty instruction grounded in the resume>"}}]}}
+
+Allowed sections: contact, summary, experience, education, skills, projects,
+certifications, formatting.
+Allowed actions: clarify, rewrite, reorder, normalize, remove.
+
+Rules:
+- Return at most 8 edits.
+- Use only the allowed sections and actions.
+- Never invent or add employers, dates, education, skills, certifications,
+  achievements, metrics, titles, or responsibilities.
+- Instructions may improve wording, hierarchy, consistency, and ATS parsing,
+  but must preserve all factual claims from the resume.
+- Do not request an edit for a section that is absent unless the instruction
+  only says to leave it absent.
+- If no safe improvement is justified, return {{"edits":[]}}.
+
+CURRENT RESUME:
+{resume}
+
+LATEST ATS GAPS:
+{gaps}
+"""
+
+APPLY_IMPROVEMENT_EDITS_PROMPT = """
+You are the editing component of a bounded ATS resume improvement workflow.
+Apply only the approved edit decisions below to the current resume.
+
+Return ONLY the complete revised resume as plain text. Preserve the original
+facts exactly: never invent, delete, or change employers, dates, education,
+skills, certifications, achievements, metrics, titles, or responsibilities.
+You may rewrite wording for clarity, normalize headings and dates, reorder
+existing sections, remove decorative formatting artifacts, and improve ATS
+readability. Keep every factual detail unless an approved decision explicitly
+removes duplicate or purely decorative text. Do not add commentary or Markdown.
+
+CURRENT RESUME:
+{resume}
+
+APPROVED EDIT DECISIONS:
+{edits}
+"""
+
 INTERVIEWER_RESUME_SYSTEM_PROMPT = """
 You are a friendly, rigorous hiring manager helping a candidate practice
 interviews using only the candidate's resume. Ask one question at a time about
