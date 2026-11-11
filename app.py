@@ -201,6 +201,7 @@ def analyze():
 def improve_resume():
     data = request.get_json(silent=True) or {}
     original = data.get("resume", "").strip()
+    requested_priority_fixes = data.get("priority_fixes", [])
     if not original:
         return jsonify({"error": "A resume is required."}), 400
 
@@ -215,7 +216,10 @@ def improve_resume():
         decision_log = []
 
         for iteration in range(1, MAX_ITERATIONS + 1):
-            gaps = score_gaps(score_before_result)
+            if iteration == 1 and isinstance(requested_priority_fixes, list):
+                gaps = [str(item).strip() for item in requested_priority_fixes if str(item).strip()][:12]
+            else:
+                gaps = score_gaps(score_before_result)
             raw_decisions = llm(
                 prompts.IMPROVEMENT_DECISIONS_PROMPT.format(
                     resume=current_resume,
