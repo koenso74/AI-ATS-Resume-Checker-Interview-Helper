@@ -133,7 +133,7 @@
     const results = document.getElementById('results');
     const improveBtn = document.getElementById('improveBtn');
     let improvedResume = '';
-    let auditPriorityFixes = [];
+    let auditPriorityFixes = { issues: [], suggestions: [] };
 
     async function importFile(file) {
       if (!file) return;
@@ -211,10 +211,10 @@
         if (!response.ok) throw new Error(data.error || 'Audit failed');
 
         const overall = Math.max(0, Math.min(100, Number(data.overall_score) || 0));
-        auditPriorityFixes = [
-          ...(data.issues || []).map(issue => `${issue.title}: ${issue.detail}`),
-          ...(data.suggestions || [])
-        ];
+        auditPriorityFixes = {
+          issues: data.issues || [],
+          suggestions: data.suggestions || []
+        };
         results.innerHTML = `
           <div class="score-row">
             <div>
@@ -272,6 +272,7 @@
             </div>
           </div>
           <p class="summary">The workflow kept the highest-scoring safe revision.</p>
+          <div class="section"><h3>First-pass priorities used</h3>${list(data.initial_gaps_used)}</div>
           <div class="comparison">
             <div><h3>Original resume</h3><pre class="resume-preview">${escapeHtml(data.original_resume)}</pre></div>
             <div><h3>Best improved version</h3><pre class="resume-preview">${escapeHtml(data.best_resume)}</pre></div>
