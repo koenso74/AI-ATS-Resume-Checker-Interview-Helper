@@ -425,6 +425,8 @@ def improve_resume():
                     "stopped": "no valid edits",
                     "applied": False,
                     "priority_gaps_used": gaps if iteration == 1 else [],
+                    "gaps_targeted": gaps,
+                    "gaps_remaining": score_gaps(score_before_result),
                 })
                 break
 
@@ -447,6 +449,8 @@ def improve_resume():
                     "stopped": "no concrete applied change",
                     "applied": False,
                     "priority_gaps_used": gaps if iteration == 1 else [],
+                    "gaps_targeted": gaps,
+                    "gaps_remaining": score_gaps(score_before_result),
                 })
                 break
 
@@ -472,6 +476,8 @@ def improve_resume():
                 "best_score": int(best_result.get("overall_score", 0)),
                 "applied": True,
                 "priority_gaps_used": gaps if iteration == 1 else [],
+                "gaps_targeted": gaps,
+                "gaps_remaining": score_gaps(score_after_result),
             })
 
             current_resume = scored_resume
@@ -487,6 +493,47 @@ def improve_resume():
             raise RuntimeError("best output path must differ from original input path")
         for item in iteration_log:
             item["selected"] = item.get("iteration") == best_iteration
+        changelog = {
+            "format_version": "1.0",
+            "report": "ATS resume improvement changelog",
+            "initial_score": initial_score,
+            "best_score": int(best_result.get("overall_score", 0)),
+            "score_change": int(best_result.get("overall_score", 0)) - initial_score,
+            "best_iteration": best_iteration,
+            "max_iterations": MAX_ITERATIONS,
+            "gaps_addressed": [
+                {
+                    "iteration": item["iteration"],
+                    "targeted": item.get("gaps_targeted", []),
+                    "remaining_after_iteration": item.get("gaps_remaining", []),
+                }
+                for item in iteration_log
+            ],
+            "iterations": [
+                {
+                    "iteration": item["iteration"],
+                    "score_before": item["score_before"],
+                    "score_after": item["score_after"],
+                    "best_score": item["best_score"],
+                    "applied": item["applied"],
+                    "selected": item.get("selected", False),
+                    "changes": [
+                        {
+                            "section": edit.get("section"),
+                            "action": edit.get("action"),
+                            "new_text": edit.get("new_text"),
+                        }
+                        for edit in item.get("edits", [])
+                    ],
+                    "rejected_changes": item.get("validation", {}).get("rejected", []),
+                    "gaps_targeted": item.get("gaps_targeted", []),
+                    "gaps_remaining": item.get("gaps_remaining", []),
+                    "stopped": item.get("stopped"),
+                }
+                for item in iteration_log
+            ],
+            "disclaimer": "A higher ATS score does not guarantee a better resume.",
+        }
         return jsonify({
             "original_resume": original,
             "best_resume": best_path.read_text(encoding="utf-8"),
@@ -500,6 +547,13 @@ def improve_resume():
             "decision_log": decision_log,
             "initial_gaps_used": iteration_log[0].get("priority_gaps_used", []) if iteration_log else [],
             "max_iterations": MAX_ITERATIONS,
+            "best_version_json": {
+                "resume": best_path.read_text(encoding="utf-8"),
+                "ats_score": int(best_result.get("overall_score", 0)),
+                "ats_result": best_result,
+                "best_iteration": best_iteration,
+                "disclaimer": "A higher ATS score does not guarantee a better resume.",
+            },
             "disclaimer": "A higher ATS score does not guarantee a better resume.",
         })
     except Exception as exc:
