@@ -10,6 +10,10 @@ from flask import Flask, jsonify, render_template, request, send_file
 from openai import OpenAI
 from docx import Document
 from docx.shared import Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Pt
 import pdfplumber
 
 import prompts
@@ -225,14 +229,62 @@ def apply_edit_decisions(current_resume, decisions):
 def build_resume_docx(resume_text):
     document = Document()
     section = document.sections[0]
-    section.top_margin = section.bottom_margin = Inches(0.65)
-    section.left_margin = section.right_margin = Inches(0.7)
-    for index, line in enumerate(resume_text.splitlines()):
+    section.top_margin = section.bottom_margin = Inches(0.4)
+    section.left_margin = section.right_margin = Inches(0.55)
+
+    normal = document.styles["Normal"]
+    normal.font.name = "Arial"
+    normal._element.rPr.rFonts.set(qn("w:eastAsia"), "Arial")
+    normal.font.size = Pt(9.2)
+    normal.paragraph_format.space_after = Pt(0)
+    normal.paragraph_format.line_spacing = 0.92
+
+    def add_bar(paragraph):
+        paragraph.paragraph_format.space_before = Pt(4)
+        paragraph.paragraph_format.space_after = Pt(1)
+        paragraph.paragraph_format.keep_with_next = True
+        p_pr = paragraph._p.get_or_add_pPr()
+        borders = p_pr.find(qn("w:pBdr"))
+        if borders is None:
+            borders = OxmlElement("w:pBdr")
+            p_pr.append(borders)
+        bottom = OxmlElement("w:bottom")
+        bottom.set(qn("w:val"), "single")
+        bottom.set(qn("w:sz"), "8")
+        bottom.set(qn("w:space"), "2")
+        bottom.set(qn("w:color"), "0E9F6E")
+        borders.append(bottom)
+
+    def is_heading(value):
+        clean = value.strip()
+        if not clean or len(clean) > 48:
+            return False
+        lowered = clean.lower().rstrip(":")
+        return lowered in SECTION_HEADINGS or (
+            clean.upper() == clean and any(char.isalpha() for char in clean)
+        )
+
+    first_content = True
+    for line in (line.strip() for line in resume_text.splitlines()):
+        if not line:
+            if document.paragraphs:
+                document.paragraphs[-1].paragraph_format.space_after = Pt(2.5)
+            continue
         paragraph = document.add_paragraph()
-        paragraph.paragraph_format.space_after = 0
-        run = paragraph.add_run(line.strip())
-        if index == 0 or line.strip().upper() == line.strip() and len(line.strip()) < 45:
+        paragraph.paragraph_format.keep_together = True
+        paragraph.paragraph_format.widow_control = True
+        run = paragraph.add_run(line)
+        if first_content:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run.bold = True
+            run.font.size = Pt(14)
+            first_content = False
+        elif is_heading(line):
+            run.bold = True
+            run.font.size = Pt(10.2)
+            add_bar(paragraph)
+        else:
+            run.font.size = Pt(9.2)
     output = BytesIO()
     document.save(output)
     output.seek(0)
