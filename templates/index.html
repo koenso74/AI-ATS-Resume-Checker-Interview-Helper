@@ -188,7 +188,8 @@
           <td>${item.iteration}</td>
           <td>${item.score_before}</td>
           <td>${item.score_after}</td>
-          <td>${(item.edits || []).map(edit => `${edit.section}: ${edit.action}`).join('<br>') || 'No valid edits'}<br><small>${item.applied ? 'Applied and verified' : 'Not applied'}</small></td>
+          <td>${(item.edits || []).map(edit => `${edit.section}: ${edit.action}`).join('<br>') || 'No valid edits'}<br><small>${item.applied ? (item.selected ? 'Applied and returned' : 'Applied to iteration file; not selected') : 'Rejected or not applied'}</small><br><details><summary>Decision JSON</summary><pre class="resume-preview">${escapeHtml(item.raw_decisions)}</pre></details></td>
+          <td><small>${escapeHtml(item.output_file)}</small></td>
         </tr>
       `).join('');
     }
@@ -271,7 +272,7 @@
               <span>${data.best_score}</span>
             </div>
           </div>
-          <p class="summary">The workflow kept the highest-scoring safe revision.</p>
+          <p class="summary">The workflow returned the highest-scoring verified file from round ${data.best_iteration || 'the original audit'}.</p>
           <div class="section"><h3>First-pass priorities used</h3>${list(data.initial_gaps_used)}</div>
           <div class="comparison">
             <div><h3>Original resume</h3><pre class="resume-preview">${escapeHtml(data.original_resume)}</pre></div>
@@ -280,7 +281,7 @@
           <div class="section">
             <h3>Iteration log</h3>
             <table class="iteration-log">
-              <thead><tr><th>Round</th><th>Before</th><th>After</th><th>Approved edits</th></tr></thead>
+              <thead><tr><th>Round</th><th>Before</th><th>After</th><th>Edits and validation</th><th>Output file</th></tr></thead>
               <tbody>${iterationRows(data.iteration_log)}</tbody>
             </table>
           </div>
