@@ -38,7 +38,7 @@ IMPROVEMENT_DECISIONS_PROMPT = """
 You are the planning component of a bounded ATS resume improvement workflow.
 Review the current resume and the latest ATS gaps. Return ONLY JSON in this
 schema:
-{{"edits":[{{"section":"<allowed section>","action":"<allowed action>","instructions":"<specific non-empty instruction grounded in the resume>"}}]}}
+{{"edits":[{{"section":"<allowed section>","action":"<allowed action>","new_text":"<complete replacement text for that section>"}}]}}
 
 Allowed sections: contact, summary, experience, education, skills, projects,
 certifications, formatting.
@@ -46,14 +46,15 @@ Allowed actions: create, clarify, rewrite, reorder, normalize, remove.
 
 Rules:
 - Return at most 6 edits.
-- Each edit must be one atomic action, not a bundle of competing alternatives.
+- Each edit must be one atomic action and new_text must contain the exact
+  replacement content, not instructions, commentary, or a suggestion.
 - For date formatting, specify exactly one canonical date format.
 - Do not include general suggestions; every recommendation must be an edit decision.
 - Use only the allowed sections and actions.
 - Never invent or add employers, dates, education, skills, certifications,
   achievements, metrics, titles, or responsibilities.
-- Instructions may improve wording, hierarchy, consistency, and ATS parsing,
-  but must preserve all factual claims from the resume.
+- new_text may improve wording, hierarchy, consistency, and ATS parsing, but
+  must preserve all factual claims from the resume.
 - Do not request an edit for a section that is absent unless the instruction
   explicitly creates it using facts already present in the resume. Creating a
   summary or Technical Skills section is allowed when grounded in existing facts.
@@ -66,45 +67,20 @@ FIRST-PASS PRIORITY GAPS FROM THE ATS AUDIT:
 {gaps}
 """
 
-APPLY_IMPROVEMENT_EDITS_PROMPT = """
-You are the editing component of a bounded ATS resume improvement workflow.
-Apply only the approved edit decisions below to the current resume.
+VALIDATE_EDIT_DECISIONS_PROMPT = """
+Validate these structured resume edit decisions against the current resume.
+Return ONLY JSON:
+{{"valid":true|false,"rejected":[{{"index":<integer>,"reason":"<specific reason>"}}]}}
 
-Return ONLY the complete revised resume as plain text. Preserve the original
-facts exactly: never invent, delete, or change employers, dates, education,
-skills, certifications, achievements, metrics, titles, or responsibilities.
-You may rewrite wording for clarity, normalize headings and dates, reorder
-existing sections, remove decorative formatting artifacts, and improve ATS
-readability. Keep every factual detail unless an approved decision explicitly
-removes duplicate or purely decorative text. Do not add commentary or Markdown.
+Reject a decision if new_text invents or changes an employer, date, degree,
+skill, certification, achievement, metric, title, or responsibility; if it is
+empty or prose instructions; or if it contradicts the current resume. A new
+summary or skills section is valid only when every claim comes from the resume.
 
 CURRENT RESUME:
 {resume}
 
-APPROVED EDIT DECISIONS:
-{edits}
-
-CORRECTION INSTRUCTIONS:
-{correction}
-"""
-
-VERIFY_APPLIED_EDITS_PROMPT = """
-Compare the original resume, revised resume, and approved edit decisions.
-Return ONLY JSON with this schema:
-{{"all_applied":true|false,"missed_edits":["<approved edit not applied>"],"contradictions":["<specific conflicting change>"]}}
-
-An edit is applied only when the revised resume visibly implements its
-instruction. A summary or Technical Skills section must actually appear if it
-was approved. Date formatting must follow the one canonical format in the
-approved instruction. Do not treat a higher score as proof that an edit was applied.
-
-ORIGINAL RESUME:
-{original}
-
-REVISED RESUME:
-{revised}
-
-APPROVED EDIT DECISIONS:
+STRUCTURED EDIT DECISIONS:
 {edits}
 """
 

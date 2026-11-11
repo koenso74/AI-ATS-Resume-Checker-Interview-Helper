@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import tempfile
 from io import BytesIO
 from pathlib import Path
 
@@ -66,8 +67,63 @@ def score_gaps(score_result):
     return gaps
 
 
-def validate_edit_decisions(raw_decisions):
-    """Keep only safe, bounded edit decisions and return rejection details."""
+SECTION_HEADINGS = {
+    "summary": "summary",
+    "professional summary": "summary",
+    "objective": "summary",
+    "experience": "experience",
+    "work experience": "experience",
+    "professional experience": "experience",
+    "education": "education",
+    "skills": "skills",
+    "technical skills": "skills",
+    "relevant coursework and technical skills": "skills",
+    "projects": "projects",
+    "certifications": "certifications",
+}
+SECTION_LABELS = {
+    "summary": "Professional Summary",
+    "experience": "Experience",
+    "education": "Education",
+    "skills": "Technical Skills",
+    "projects": "Projects",
+    "certifications": "Certifications",
+}
+
+
+def parse_resume_sections(resume):
+    sections = {"contact": []}
+    order = ["contact"]
+    current = "contact"
+    for line in resume.splitlines():
+        heading = re.sub(r"[^a-z ]", "", line.strip().lower())
+        if heading in SECTION_HEADINGS and len(line.strip()) < 60:
+            current = SECTION_HEADINGS[heading]
+            if current not in sections:
+                sections[current] = []
+                order.append(current)
+        else:
+            sections.setdefault(current, []).append(line.rstrip())
+    return sections, order
+
+
+def render_resume_sections(sections, order):
+    rendered = []
+    for section in order:
+        content = [line.strip() for line in sections.get(section, [])]
+        while content and not content[-1]:
+            content.pop()
+        if not any(content):
+            continue
+        if section != "contact":
+            rendered.append(SECTION_LABELS.get(section, section.title()))
+        rendered.extend(content)
+        rendered.append("")
+    return "\n".join(rendered).strip()
+
+
+def validate_edit_decisions(raw_decisions, current_resume):
+    """Validate structured decisions locally and against the source resume."""
     try:
         payload = json.loads(raw_decisions)
     except json.JSONDecodeError as exc:
@@ -78,32 +134,88 @@ def validate_edit_decisions(raw_decisions):
         return [], ["edits must be a JSON array"]
 
     accepted, rejected = [], []
-    for index, decision in enumerate(decisions[:8]):
+    seen_sections = set()
+    for index, decision in enumerate(decisions[:6]):
         if not isinstance(decision, dict):
             rejected.append(f"edit {index + 1}: must be an object")
             continue
         section = str(decision.get("section", "")).strip().lower()
         action = str(decision.get("action", "")).strip().lower()
-        instructions = str(decision.get("instructions", "")).strip()
+        new_text = str(decision.get("new_text", "")).strip()
         if section not in ALLOWED_EDIT_SECTIONS:
             rejected.append(f"edit {index + 1}: disallowed section")
         elif action not in ALLOWED_EDIT_ACTIONS:
             rejected.append(f"edit {index + 1}: disallowed action")
-        elif not instructions:
-            rejected.append(f"edit {index + 1}: empty instructions")
-        elif len(instructions) > 600:
-            rejected.append(f"edit {index + 1}: instructions too long")
-        elif FORBIDDEN_EDIT_LANGUAGE.search(instructions):
-            rejected.append(f"edit {index + 1}: asks for unsupported invented content")
+        elif not new_text:
+            rejected.append(f"edit {index + 1}: empty new_text")
+        elif len(new_text) > 4000:
+            rejected.append(f"edit {index + 1}: new_text too long")
+        elif section in seen_sections:
+            rejected.append(f"edit {index + 1}: contradictory duplicate section decision")
         else:
+            seen_sections.add(section)
             accepted.append({
                 "section": section,
                 "action": action,
-                "instructions": instructions,
+                "new_text": new_text,
             })
     if len(decisions) > 6:
         rejected.append("extra edits beyond the maximum of 6 were rejected")
+
+    if accepted:
+        try:
+            fact_check = json.loads(llm(
+                prompts.VALIDATE_EDIT_DECISIONS_PROMPT.format(
+                    resume=current_resume,
+                    edits=json.dumps(accepted),
+                ),
+                json_mode=True,
+            ))
+            for item in fact_check.get("rejected", []):
+                index = int(item.get("index", -1))
+                reason = str(item.get("reason", "failed fact validation"))
+                if 0 <= index < len(accepted):
+                    rejected.append(f"edit {index + 1}: {reason}")
+                    accepted[index]["_invalid"] = True
+            accepted = [item for item in accepted if not item.get("_invalid")]
+        except Exception as exc:
+            rejected.append(f"fact validation failed: {exc}")
+            accepted = []
     return accepted, rejected
+
+
+def apply_edit_decisions(current_resume, decisions):
+    sections, order = parse_resume_sections(current_resume)
+    applied, rejected = [], []
+    for decision in decisions:
+        section = decision["section"]
+        new_text = decision["new_text"].strip()
+        if section == "formatting":
+            candidate = new_text
+            if candidate != current_resume.strip():
+                current_resume = candidate
+                applied.append(decision)
+            else:
+                rejected.append("formatting decision produced no text change")
+            continue
+        if section not in sections and decision["action"] != "create":
+            rejected.append(f"{section}: cannot edit a missing section without create")
+            continue
+        if section not in sections:
+            sections[section] = []
+            if section == "summary":
+                order.insert(1, section)
+            elif section == "skills":
+                order.insert(order.index("experience") + 1 if "experience" in order else len(order), section)
+            else:
+                order.append(section)
+        sections[section] = new_text.splitlines()
+        applied.append(decision)
+    if sections:
+        updated = render_resume_sections(sections, order)
+    else:
+        updated = current_resume.strip()
+    return updated, applied, rejected
 
 
 def build_resume_docx(resume_text):
@@ -206,12 +318,17 @@ def improve_resume():
         return jsonify({"error": "A resume is required."}), 400
 
     try:
-        score_before_result = score_resume(original)
+        work_dir = Path(tempfile.mkdtemp(prefix="ats-improve-"))
+        original_path = work_dir / "original-resume.txt"
+        original_path.write_text(original, encoding="utf-8")
+        score_before_result = score_resume(original_path.read_text(encoding="utf-8"))
         score_before = int(score_before_result.get("overall_score", 0))
         initial_score = score_before
         current_resume = original
         best_resume = original
         best_result = score_before_result
+        best_iteration = 0
+        best_path = work_dir / "best-resume.txt"
         iteration_log = []
         decision_log = []
 
@@ -228,6 +345,7 @@ def improve_resume():
                 gaps = gaps[:12]
             else:
                 gaps = score_gaps(score_before_result)
+
             raw_decisions = llm(
                 prompts.IMPROVEMENT_DECISIONS_PROMPT.format(
                     resume=current_resume,
@@ -235,109 +353,90 @@ def improve_resume():
                 ),
                 json_mode=True,
             )
-            edits, rejected = validate_edit_decisions(raw_decisions)
-            decision_log.append({"iteration": iteration, "rejected": rejected})
+            edits, rejected = validate_edit_decisions(raw_decisions, current_resume)
+            decision_log.append({"iteration": iteration, "raw": raw_decisions, "rejected": rejected})
 
             if not edits:
                 iteration_log.append({
                     "iteration": iteration,
                     "edits": [],
-                    "rejected": rejected,
+                    "raw_decisions": raw_decisions,
+                    "validation": {"accepted": [], "rejected": rejected},
+                    "output_file": str(original_path),
                     "score_before": score_before,
                     "score_after": score_before,
+                    "best_score": int(best_result.get("overall_score", 0)),
                     "stopped": "no valid edits",
-                    "priority_gaps_used": gaps if iteration == 1 else [],
-                })
-                break
-
-            revised_resume = llm(
-                prompts.APPLY_IMPROVEMENT_EDITS_PROMPT.format(
-                    resume=current_resume,
-                    edits=json.dumps(edits),
-                    correction="",
-                )
-            ).strip()
-            if not revised_resume or len(revised_resume) < 80:
-                rejected.append("editor returned empty or unusably short resume")
-                iteration_log.append({
-                    "iteration": iteration,
-                    "edits": edits,
-                    "rejected": rejected,
-                    "score_before": score_before,
-                    "score_after": score_before,
-                    "stopped": "invalid revised resume",
-                    "priority_gaps_used": gaps if iteration == 1 else [],
-                })
-                break
-
-            verification = json.loads(llm(
-                prompts.VERIFY_APPLIED_EDITS_PROMPT.format(
-                    original=current_resume,
-                    revised=revised_resume,
-                    edits=json.dumps(edits),
-                ),
-                json_mode=True,
-            ))
-            if not verification.get("all_applied"):
-                missed = verification.get("missed_edits", [])
-                correction = "Apply these missed approved edits exactly: " + "; ".join(map(str, missed))
-                revised_resume = llm(
-                    prompts.APPLY_IMPROVEMENT_EDITS_PROMPT.format(
-                        resume=current_resume,
-                        edits=json.dumps(edits),
-                        correction=correction,
-                    )
-                ).strip()
-                verification = json.loads(llm(
-                    prompts.VERIFY_APPLIED_EDITS_PROMPT.format(
-                        original=current_resume,
-                        revised=revised_resume,
-                        edits=json.dumps(edits),
-                    ),
-                    json_mode=True,
-                ))
-            if not verification.get("all_applied"):
-                rejected.append("editor did not visibly apply all approved edits")
-                iteration_log.append({
-                    "iteration": iteration,
-                    "edits": edits,
-                    "rejected": rejected,
-                    "score_before": score_before,
-                    "score_after": score_before,
-                    "stopped": "unverified edits",
                     "applied": False,
-                    "verification": verification,
                     "priority_gaps_used": gaps if iteration == 1 else [],
                 })
                 break
 
-            score_after_result = score_resume(revised_resume)
+            revised_resume, applied, apply_rejected = apply_edit_decisions(current_resume, edits)
+            rejected.extend(apply_rejected)
+            iteration_path = work_dir / f"iteration-{iteration}-resume.txt"
+            iteration_path.write_text(revised_resume, encoding="utf-8")
+            output_changed = revised_resume.strip() != current_resume.strip()
+            if not output_changed or not applied:
+                rejected.append("no approved edit produced a concrete text change")
+                iteration_log.append({
+                    "iteration": iteration,
+                    "edits": edits,
+                    "raw_decisions": raw_decisions,
+                    "validation": {"accepted": edits, "rejected": rejected},
+                    "output_file": str(iteration_path),
+                    "score_before": score_before,
+                    "score_after": score_before,
+                    "best_score": int(best_result.get("overall_score", 0)),
+                    "stopped": "no concrete applied change",
+                    "applied": False,
+                    "priority_gaps_used": gaps if iteration == 1 else [],
+                })
+                break
+
+            # Read and score the newly written iteration file, never the old text.
+            scored_resume = iteration_path.read_text(encoding="utf-8")
+            score_after_result = score_resume(scored_resume)
             score_after = int(score_after_result.get("overall_score", 0))
+            best_score = int(best_result.get("overall_score", 0))
+            if score_after >= best_score:
+                best_resume = scored_resume
+                best_result = score_after_result
+                best_iteration = iteration
+                best_path.write_text(best_resume, encoding="utf-8")
+
             iteration_log.append({
                 "iteration": iteration,
                 "edits": edits,
-                "rejected": rejected,
+                "raw_decisions": raw_decisions,
+                "validation": {"accepted": edits, "rejected": rejected},
+                "output_file": str(iteration_path),
                 "score_before": score_before,
                 "score_after": score_after,
-                "priority_gaps_used": gaps if iteration == 1 else [],
+                "best_score": int(best_result.get("overall_score", 0)),
                 "applied": True,
-                "verification": verification,
+                "priority_gaps_used": gaps if iteration == 1 else [],
             })
 
-            if score_after >= int(best_result.get("overall_score", 0)):
-                best_resume = revised_resume
-                best_result = score_after_result
-            current_resume = revised_resume
+            current_resume = scored_resume
             score_before_result = score_after_result
             score_before = score_after
-
             if score_after - iteration_log[-1]["score_before"] < 2:
                 iteration_log[-1]["stopped"] = "plateau or improvement below 2 points"
                 break
 
+        if not best_path.exists():
+            best_path.write_text(best_resume, encoding="utf-8")
+        if best_path == original_path:
+            raise RuntimeError("best output path must differ from original input path")
+        for item in iteration_log:
+            item["selected"] = item.get("iteration") == best_iteration
         return jsonify({
             "original_resume": original,
-            "best_resume": best_resume,
+            "best_resume": best_path.read_text(encoding="utf-8"),
+            "original_file_path": str(original_path),
+            "best_file_path": str(best_path),
+            "best_iteration": best_iteration,
             "initial_score": initial_score,
             "best_score": int(best_result.get("overall_score", 0)),
             "best_result": best_result,
