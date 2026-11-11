@@ -97,7 +97,7 @@
         <textarea id="resume" placeholder="Paste your resume text here..."></textarea>
         <div class="actions">
           <button id="analyzeBtn">Run ATS audit</button>
-          <button id="improveBtn" class="improve">Improve my resume</button>
+          <button id="improveBtn" class="improve hidden">Improve my resume</button>
           <span id="status" class="status"></span>
         </div>
       </div>
@@ -133,6 +133,7 @@
     const results = document.getElementById('results');
     const improveBtn = document.getElementById('improveBtn');
     let improvedResume = '';
+    let auditPriorityFixes = [];
 
     async function importFile(file) {
       if (!file) return;
@@ -210,6 +211,10 @@
         if (!response.ok) throw new Error(data.error || 'Audit failed');
 
         const overall = Math.max(0, Math.min(100, Number(data.overall_score) || 0));
+        auditPriorityFixes = [
+          ...(data.issues || []).map(issue => `${issue.title}: ${issue.detail}`),
+          ...(data.suggestions || [])
+        ];
         results.innerHTML = `
           <div class="score-row">
             <div>
@@ -230,6 +235,7 @@
           <div class="section"><h3>Suggested summary</h3><div class="rewrite">${data.rewritten_summary}</div></div>
         `;
         results.classList.add('visible');
+        improveBtn.classList.remove('hidden');
         status.textContent = 'Audit complete';
       } catch (error) {
         status.textContent = error.message;
@@ -250,7 +256,7 @@
         const response = await fetch('/api/improve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ resume: text })
+          body: JSON.stringify({ resume: text, priority_fixes: auditPriorityFixes })
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Improvement failed');
