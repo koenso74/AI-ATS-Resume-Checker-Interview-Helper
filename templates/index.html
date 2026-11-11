@@ -32,6 +32,7 @@
     .actions { display: flex; align-items: center; gap: 12px; margin-top: 15px; }
     button { border: 0; border-radius: 12px; padding: 12px 17px; cursor: pointer; color: #fff; background: #172033; font-weight: 800; transition: .2s ease; }
     button:hover { transform: translateY(-1px); background: #0e9f6e; }
+    .improve { background: #0e9f6e; }
     .status { color: #64748b; font-size: 13px; }
     #results { display: none; }
     #results.visible { display: block; }
@@ -50,6 +51,13 @@
     .issue { padding: 12px 14px; margin: 9px 0; border-left: 4px solid #f59e0b; border-radius: 10px; background: #fff8e8; } .issue.high { border-color: #ef4444; background: #fff1f1; } .issue.low { border-color: #38bdf8; background: #effaff; }
     .issue b { display: block; margin-bottom: 3px; font-size: 13px; } .issue span { color: #68758a; font-size: 13px; line-height: 1.4; }
     .rewrite { white-space: pre-wrap; padding: 15px; border-radius: 13px; color: #45536a; background: #f7f9fc; font-size: 13px; line-height: 1.55; }
+    .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
+    .comparison h3 { margin: 0 0 8px; font-size: 13px; }
+    .resume-preview { max-height: 360px; overflow: auto; margin: 0; padding: 13px; border-radius: 12px; color: #45536a; background: #f7f9fc; font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
+    .iteration-log { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 12px; }
+    .iteration-log th, .iteration-log td { padding: 8px; border-bottom: 1px solid #e7edf4; text-align: left; vertical-align: top; }
+    .iteration-log th { color: #607089; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+    .disclaimer { margin-top: 15px; padding: 11px 13px; border-radius: 10px; color: #7a5b17; background: #fff8e8; font-size: 12px; }
     .interview { margin-top: 22px; }
     .chat { min-height: 180px; max-height: 420px; overflow-y: auto; margin: 18px 0 12px; padding: 14px; border-radius: 15px; background: #f7f9fc; }
     .bubble { max-width: 82%; margin: 9px 0; padding: 11px 13px; border-radius: 14px; color: #45536a; font-size: 14px; line-height: 1.45; white-space: pre-wrap; }
@@ -89,6 +97,7 @@
         <textarea id="resume" placeholder="Paste your resume text here..."></textarea>
         <div class="actions">
           <button id="analyzeBtn">Run ATS audit</button>
+          <button id="improveBtn" class="improve">Improve my resume</button>
           <span id="status" class="status"></span>
         </div>
       </div>
@@ -122,6 +131,8 @@
     const resume = document.getElementById('resume');
     const status = document.getElementById('status');
     const results = document.getElementById('results');
+    const improveBtn = document.getElementById('improveBtn');
+    let improvedResume = '';
 
     async function importFile(file) {
       if (!file) return;
@@ -159,6 +170,26 @@
       return (issues || []).map(issue =>
         '<div class="issue ' + issue.severity + '"><b>' + issue.title + '</b><span>' + issue.detail + '</span></div>'
       ).join('');
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function iterationRows(log) {
+      return (log || []).map(item => `
+        <tr>
+          <td>${item.iteration}</td>
+          <td>${item.score_before}</td>
+          <td>${item.score_after}</td>
+          <td>${(item.edits || []).map(edit => `${edit.section}: ${edit.action}`).join('<br>') || 'No valid edits'}</td>
+        </tr>
+      `).join('');
     }
 
     document.getElementById('analyzeBtn').addEventListener('click', async () => {
@@ -202,6 +233,82 @@
         status.textContent = 'Audit complete';
       } catch (error) {
         status.textContent = error.message;
+      }
+    });
+
+    improveBtn.addEventListener('click', async () => {
+      const text = resume.value.trim();
+      if (!text) {
+        status.textContent = 'Upload or paste a resume first.';
+        return;
+      }
+
+      improveBtn.disabled = true;
+      improveBtn.textContent = 'Improving...';
+      status.textContent = 'Running up to 3 improvement rounds...';
+      try {
+        const response = await fetch('/api/improve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resume: text })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Improvement failed');
+
+        improvedResume = data.best_resume || text;
+        results.innerHTML = `
+          <div class="score-row">
+            <div>
+              <div class="score">${data.best_score}<small>/ 100 best ATS score</small></div>
+            </div>
+            <div class="ring" style="--score:${data.best_score}" aria-label="Best ATS score: ${data.best_score} out of 100">
+              <span>${data.best_score}</span>
+            </div>
+          </div>
+          <p class="summary">The workflow kept the highest-scoring safe revision.</p>
+          <div class="comparison">
+            <div><h3>Original resume</h3><pre class="resume-preview">${escapeHtml(data.original_resume)}</pre></div>
+            <div><h3>Best improved version</h3><pre class="resume-preview">${escapeHtml(data.best_resume)}</pre></div>
+          </div>
+          <div class="section">
+            <h3>Iteration log</h3>
+            <table class="iteration-log">
+              <thead><tr><th>Round</th><th>Before</th><th>After</th><th>Approved edits</th></tr></thead>
+              <tbody>${iterationRows(data.iteration_log)}</tbody>
+            </table>
+          </div>
+          <div class="actions">
+            <button id="downloadImproved" class="improve">Download improved DOCX</button>
+          </div>
+          <div class="disclaimer">${escapeHtml(data.disclaimer)}</div>
+        `;
+        results.classList.add('visible');
+        status.textContent = 'Improvement complete';
+
+        document.getElementById('downloadImproved').addEventListener('click', async () => {
+          if (!window.confirm('Download the best improved resume as a new DOCX? Your original resume will not be changed.')) return;
+          const downloadResponse = await fetch('/api/improve/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resume: improvedResume })
+          });
+          if (!downloadResponse.ok) {
+            status.textContent = 'Could not create the improved DOCX.';
+            return;
+          }
+          const blob = await downloadResponse.blob();
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'improved-resume.docx';
+          link.click();
+          URL.revokeObjectURL(url);
+        });
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        improveBtn.disabled = false;
+        improveBtn.textContent = 'Improve my resume';
       }
     });
 
