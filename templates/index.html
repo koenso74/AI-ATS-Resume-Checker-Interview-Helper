@@ -188,8 +188,7 @@
           <td>${item.iteration}</td>
           <td>${item.score_before}</td>
           <td>${item.score_after}</td>
-          <td>${(item.edits || []).map(edit => `${edit.section}: ${edit.action}`).join('<br>') || 'No valid edits'}<br><small>${item.applied ? (item.selected ? 'Applied and returned' : 'Applied to iteration file; not selected') : 'Rejected or not applied'}</small><br><details><summary>Decision JSON</summary><pre class="resume-preview">${escapeHtml(item.raw_decisions)}</pre></details></td>
-          <td><small>${escapeHtml(item.output_file)}</small></td>
+          <td>${(item.edits || []).map(edit => `${edit.section}: ${edit.action}`).join('<br>') || 'No valid edits'}<br><small>${item.applied ? (item.selected ? 'Applied and returned' : 'Applied to iteration file; not selected') : 'Rejected or not applied'}</small></td>
         </tr>
       `).join('');
     }
@@ -281,7 +280,7 @@
           <div class="section">
             <h3>Iteration log</h3>
             <table class="iteration-log">
-              <thead><tr><th>Round</th><th>Before</th><th>After</th><th>Edits and validation</th><th>Output file</th></tr></thead>
+              <thead><tr><th>Round</th><th>Before</th><th>After</th><th>Edits and validation</th></tr></thead>
               <tbody>${iterationRows(data.iteration_log)}</tbody>
             </table>
           </div>
