@@ -35,7 +35,7 @@ ALLOWED_EDIT_SECTIONS = {
     "contact", "summary", "experience", "education", "skills",
     "projects", "certifications", "formatting",
 }
-ALLOWED_EDIT_ACTIONS = {"clarify", "rewrite", "reorder", "normalize", "remove"}
+ALLOWED_EDIT_ACTIONS = {"create", "clarify", "rewrite", "reorder", "normalize", "remove"}
 FORBIDDEN_EDIT_LANGUAGE = re.compile(
     r"\b(invent|fabricat|make up|create a new|add (?:a|an|new)|assume)\b",
     re.IGNORECASE,
@@ -101,8 +101,8 @@ def validate_edit_decisions(raw_decisions):
                 "action": action,
                 "instructions": instructions,
             })
-    if len(decisions) > 8:
-        rejected.append("extra edits beyond the maximum of 8 were rejected")
+    if len(decisions) > 6:
+        rejected.append("extra edits beyond the maximum of 6 were rejected")
     return accepted, rejected
 
 
@@ -254,6 +254,7 @@ def improve_resume():
                 prompts.APPLY_IMPROVEMENT_EDITS_PROMPT.format(
                     resume=current_resume,
                     edits=json.dumps(edits),
+                    correction="",
                 )
             ).strip()
             if not revised_resume or len(revised_resume) < 80:
@@ -269,6 +270,47 @@ def improve_resume():
                 })
                 break
 
+            verification = json.loads(llm(
+                prompts.VERIFY_APPLIED_EDITS_PROMPT.format(
+                    original=current_resume,
+                    revised=revised_resume,
+                    edits=json.dumps(edits),
+                ),
+                json_mode=True,
+            ))
+            if not verification.get("all_applied"):
+                missed = verification.get("missed_edits", [])
+                correction = "Apply these missed approved edits exactly: " + "; ".join(map(str, missed))
+                revised_resume = llm(
+                    prompts.APPLY_IMPROVEMENT_EDITS_PROMPT.format(
+                        resume=current_resume,
+                        edits=json.dumps(edits),
+                        correction=correction,
+                    )
+                ).strip()
+                verification = json.loads(llm(
+                    prompts.VERIFY_APPLIED_EDITS_PROMPT.format(
+                        original=current_resume,
+                        revised=revised_resume,
+                        edits=json.dumps(edits),
+                    ),
+                    json_mode=True,
+                ))
+            if not verification.get("all_applied"):
+                rejected.append("editor did not visibly apply all approved edits")
+                iteration_log.append({
+                    "iteration": iteration,
+                    "edits": edits,
+                    "rejected": rejected,
+                    "score_before": score_before,
+                    "score_after": score_before,
+                    "stopped": "unverified edits",
+                    "applied": False,
+                    "verification": verification,
+                    "priority_gaps_used": gaps if iteration == 1 else [],
+                })
+                break
+
             score_after_result = score_resume(revised_resume)
             score_after = int(score_after_result.get("overall_score", 0))
             iteration_log.append({
@@ -278,9 +320,11 @@ def improve_resume():
                 "score_before": score_before,
                 "score_after": score_after,
                 "priority_gaps_used": gaps if iteration == 1 else [],
+                "applied": True,
+                "verification": verification,
             })
 
-            if score_after > int(best_result.get("overall_score", 0)):
+            if score_after >= int(best_result.get("overall_score", 0)):
                 best_resume = revised_resume
                 best_result = score_after_result
             current_resume = revised_resume

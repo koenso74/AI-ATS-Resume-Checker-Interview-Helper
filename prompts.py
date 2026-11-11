@@ -42,17 +42,21 @@ schema:
 
 Allowed sections: contact, summary, experience, education, skills, projects,
 certifications, formatting.
-Allowed actions: clarify, rewrite, reorder, normalize, remove.
+Allowed actions: create, clarify, rewrite, reorder, normalize, remove.
 
 Rules:
-- Return at most 8 edits.
+- Return at most 6 edits.
+- Each edit must be one atomic action, not a bundle of competing alternatives.
+- For date formatting, specify exactly one canonical date format.
+- Do not include general suggestions; every recommendation must be an edit decision.
 - Use only the allowed sections and actions.
 - Never invent or add employers, dates, education, skills, certifications,
   achievements, metrics, titles, or responsibilities.
 - Instructions may improve wording, hierarchy, consistency, and ATS parsing,
   but must preserve all factual claims from the resume.
 - Do not request an edit for a section that is absent unless the instruction
-  only says to leave it absent.
+  explicitly creates it using facts already present in the resume. Creating a
+  summary or Technical Skills section is allowed when grounded in existing facts.
 - If no safe improvement is justified, return {{"edits":[]}}.
 
 CURRENT RESUME:
@@ -76,6 +80,29 @@ removes duplicate or purely decorative text. Do not add commentary or Markdown.
 
 CURRENT RESUME:
 {resume}
+
+APPROVED EDIT DECISIONS:
+{edits}
+
+CORRECTION INSTRUCTIONS:
+{correction}
+"""
+
+VERIFY_APPLIED_EDITS_PROMPT = """
+Compare the original resume, revised resume, and approved edit decisions.
+Return ONLY JSON with this schema:
+{{"all_applied":true|false,"missed_edits":["<approved edit not applied>"],"contradictions":["<specific conflicting change>"]}}
+
+An edit is applied only when the revised resume visibly implements its
+instruction. A summary or Technical Skills section must actually appear if it
+was approved. Date formatting must follow the one canonical format in the
+approved instruction. Do not treat a higher score as proof that an edit was applied.
+
+ORIGINAL RESUME:
+{original}
+
+REVISED RESUME:
+{revised}
 
 APPROVED EDIT DECISIONS:
 {edits}
