@@ -237,7 +237,7 @@ def apply_edit_decisions(current_resume, decisions):
             rejected.append(f"{section}: edit contained only a section heading")
             continue
         sections[section] = cleaned_text.splitlines()
-        applied.append(decision)
+        applied.append({**decision, "new_text": cleaned_text})
     if formatting_applied:
         updated = current_resume.strip()
     elif sections:
@@ -286,6 +286,7 @@ def build_resume_docx(resume_text):
         )
 
     first_content = True
+    in_contact_block = True
     for line in (line.strip() for line in resume_text.splitlines()):
         if not line:
             if document.paragraphs:
@@ -294,6 +295,7 @@ def build_resume_docx(resume_text):
         paragraph = document.add_paragraph()
         paragraph.paragraph_format.keep_together = True
         paragraph.paragraph_format.widow_control = True
+        paragraph.paragraph_format.space_after = Pt(1.6)
         run = paragraph.add_run(line)
         if first_content:
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -301,9 +303,13 @@ def build_resume_docx(resume_text):
             run.font.size = Pt(14)
             first_content = False
         elif is_heading(line):
+            in_contact_block = False
             run.bold = True
             run.font.size = Pt(10.2)
             add_bar(paragraph)
+        elif in_contact_block:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run.font.size = Pt(9.2)
         else:
             run.font.size = Pt(9.2)
     output = BytesIO()
@@ -488,14 +494,14 @@ def improve_resume():
 
             iteration_log.append({
                 "iteration": iteration,
-                "edits": edits,
+                "edits": applied,
                 "raw_decisions": raw_decisions,
-                "validation": {"accepted": edits, "rejected": rejected},
+                "validation": {"accepted": applied, "rejected": rejected},
                 "output_file": str(iteration_path),
                 "score_before": score_before,
                 "score_after": score_after,
                 "best_score": int(best_result.get("overall_score", 0)),
-                "applied": True,
+                "applied": bool(applied),
                 "priority_gaps_used": gaps if iteration == 1 else [],
                 "gaps_targeted": gaps,
                 "gaps_remaining": score_gaps(score_after_result),
