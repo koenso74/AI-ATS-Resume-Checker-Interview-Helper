@@ -187,6 +187,7 @@ def validate_edit_decisions(raw_decisions, current_resume):
 def apply_edit_decisions(current_resume, decisions):
     sections, order = parse_resume_sections(current_resume)
     applied, rejected = [], []
+    formatting_applied = False
     for decision in decisions:
         section = decision["section"]
         new_text = decision["new_text"].strip()
@@ -194,6 +195,7 @@ def apply_edit_decisions(current_resume, decisions):
             candidate = new_text
             if candidate != current_resume.strip():
                 current_resume = candidate
+                formatting_applied = True
                 applied.append(decision)
             else:
                 rejected.append("formatting decision produced no text change")
@@ -211,7 +213,9 @@ def apply_edit_decisions(current_resume, decisions):
                 order.append(section)
         sections[section] = new_text.splitlines()
         applied.append(decision)
-    if sections:
+    if formatting_applied:
+        updated = current_resume.strip()
+    elif sections:
         updated = render_resume_sections(sections, order)
     else:
         updated = current_resume.strip()
