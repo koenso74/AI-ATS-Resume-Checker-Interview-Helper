@@ -126,6 +126,22 @@ def render_resume_sections(sections, order):
     return "\n".join(rendered).strip()
 
 
+def clean_section_edit_text(section, text):
+    """Remove headings returned inside section content; the renderer owns headings."""
+    lines = [line.rstrip() for line in text.strip().splitlines()]
+    section_heading = SECTION_LABELS.get(section, section.title()).lower()
+    cleaned = []
+    for line in lines:
+        normalized = re.sub(r"[^a-z ]", "", line.strip().lower())
+        if normalized in SECTION_HEADINGS and (
+            normalized == section_heading.lower()
+            or SECTION_HEADINGS.get(normalized) == section
+        ):
+            continue
+        cleaned.append(line)
+    return "\n".join(cleaned).strip()
+
+
 def validate_edit_decisions(raw_decisions, current_resume):
     """Validate structured decisions locally and against the source resume."""
     try:
@@ -196,7 +212,8 @@ def apply_edit_decisions(current_resume, decisions):
         section = decision["section"]
         new_text = decision["new_text"].strip()
         if section == "formatting":
-            candidate = new_text
+            format_sections, format_order = parse_resume_sections(new_text)
+            candidate = render_resume_sections(format_sections, format_order)
             if candidate != current_resume.strip():
                 current_resume = candidate
                 formatting_applied = True
@@ -215,7 +232,11 @@ def apply_edit_decisions(current_resume, decisions):
                 order.insert(order.index("experience") + 1 if "experience" in order else len(order), section)
             else:
                 order.append(section)
-        sections[section] = new_text.splitlines()
+        cleaned_text = clean_section_edit_text(section, new_text)
+        if not cleaned_text:
+            rejected.append(f"{section}: edit contained only a section heading")
+            continue
+        sections[section] = cleaned_text.splitlines()
         applied.append(decision)
     if formatting_applied:
         updated = current_resume.strip()
